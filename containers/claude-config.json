@@ -1,0 +1,13 @@
+{
+  "hasCompletedOnboarding": true,
+  "theme": "dark",
+  "numStartups": 1,
+  "lastOnboardingVersion": "2.1.63",
+  "projects": {
+    "/home/agent/workspace": {
+      "allowedTools": [],
+      "hasTrustDialogAccepted": true,
+      "projectOnboardingSeenCount": 1
+    }
+  }
+}

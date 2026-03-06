@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.next/
+config.yaml
+config.docker.yaml
+*.env
+.env*
+!.env.example
+certs/
+*.pem
+*.key
+*.crt
+.DS_Store
+*.log
+package-lock.json

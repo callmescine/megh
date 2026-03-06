@@ -1,0 +1,181 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: can
+      POSTGRES_USER: can
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U can"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      MEGH_JWT_SECRET: ${MEGH_JWT_SECRET}
+      MEGH_DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      MEGH_STRIPE_SECRET_KEY: ${MEGH_STRIPE_SECRET_KEY:-}
+      MEGH_STRIPE_WEBHOOK_SECRET: ${MEGH_STRIPE_WEBHOOK_SECRET:-}
+      MEGH_LLM_API_KEY: ${MEGH_LLM_API_KEY}
+      MEGH_REDIS_PASSWORD: ${MEGH_REDIS_PASSWORD:-}
+      MEGH_OAUTH_TOKEN: ${MEGH_OAUTH_TOKEN:-}
+    volumes:
+      - ./config.docker.yaml:/app/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      MEGH_DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      MEGH_LLM_API_KEY: ${MEGH_LLM_API_KEY}
+      MEGH_REDIS_PASSWORD: ${MEGH_REDIS_PASSWORD:-}
+    volumes:
+      - ./config.docker.yaml:/app/config.yaml:ro
+    ports:
+      - "8787:8787"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8787/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_API_URL: ""
+      NEXT_PUBLIC_WS_URL: ""
+    ports:
+      - "3001:3001"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+      - web
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/preview.conf:/etc/nginx/conf.d/preview.conf:ro
+    ports:
+      - "80:80"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+networks:
+  default:
+    name: megh_internal
+  containers:
+    name: megh_containers
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:

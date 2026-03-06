@@ -1,0 +1,24 @@
+{
+  "name": "@megh/proxy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/usage-proxy.ts",
+    "build": "tsc",
+    "start": "node dist/usage-proxy.js"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.0",
+    "pg": "^8.13.0",
+    "yaml": "^2.7.0",
+    "uuid": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.0",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  }
+}

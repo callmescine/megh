@@ -1,0 +1,34 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    command: npm run dev -w server
+    volumes:
+      - ./server:/app/server
+      - ./config.yaml:/app/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      NODE_ENV: development
+
+  proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    command: npm run dev -w proxy
+    volumes:
+      - ./proxy:/app/proxy
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      NODE_ENV: development
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    command: npm run dev -w web
+    volumes:
+      - ./web:/app/web
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:3000

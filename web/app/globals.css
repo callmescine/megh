@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-0 text-gray-100 antialiased;
+  }
+
+  ::selection {
+    @apply bg-megh-600/40;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    @apply w-1.5;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-400 rounded-full;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 rounded-lg text-sm font-medium bg-megh-600 text-white hover:bg-megh-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+  }
+  .btn-secondary {
+    @apply px-4 py-2 rounded-lg text-sm font-medium bg-surface-200 text-gray-200 border border-surface-300 hover:bg-surface-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+  }
+  .btn-destructive {
+    @apply px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+  }
+  .btn-ghost {
+    @apply px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-surface-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+  }
+  .input-field {
+    @apply w-full px-4 py-3 rounded-lg bg-surface-100 border border-surface-300 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-megh-500 focus:border-transparent focus:shadow-glow-sm transition-all;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-megh-300 to-megh-500 bg-clip-text text-transparent;
+  }
+  .glass {
+    @apply bg-white/5 backdrop-blur-sm border border-white/10;
+  }
+  .glow-border {
+    @apply border border-megh-500/30 shadow-glow-sm;
+  }
+}

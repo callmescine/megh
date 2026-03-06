@@ -1,0 +1,75 @@
+# Megh — Configuration
+# Copy this file to config.yaml and fill in your values.
+
+platform:
+  name: "Megh"
+  domain: "localhost"
+  # logo_url: "https://example.com/logo.png"
+
+llm:
+  # REQUIRED: Your Anthropic API key
+  api_key: "sk-ant-..."
+  allowed_models:
+    - "claude-sonnet-4-20250514"
+    - "claude-haiku-4-5-20251001"
+
+containers:
+  image: "megh-agent:latest"
+  memory: "2g"            # Memory limit per container
+  cpu: 1                  # CPU cores per container
+  max_concurrent: 3       # Max active sessions per user
+  max_global_sessions: 20 # Max active sessions system-wide (all users)
+  container_concurrency: 2 # Max parallel Docker container creations
+  port_range:
+    start: 8100
+    end: 8200
+  ttl_default: 120        # Default session TTL in minutes
+  grace_period: 15        # Minutes after TTL before destruction
+  session_rate_limit: 3   # Max session creation requests per user per minute
+  min_balance: 0.50       # Minimum USD balance to start a session
+  queue_timeout: 30       # Seconds to wait in container creation queue
+
+billing:
+  # Stripe keys (leave blank to disable Stripe)
+  stripe_secret_key: ""
+  stripe_publishable_key: ""
+  markup_multiplier: 2.0  # Cost multiplier on top of Anthropic pricing
+  trial_credits: 2.00     # USD credits for new accounts
+  # Model pricing (per 1M tokens)
+  model_rates:
+    claude-sonnet-4-20250514:
+      input: 3.00
+      output: 15.00
+    claude-haiku-4-5-20251001:
+      input: 0.80
+      output: 4.00
+
+auth:
+  jwt_secret: "CHANGE_ME_TO_A_RANDOM_STRING"
+  jwt_expiry: "24h"
+
+uploads:
+  max_file_size: 209715200      # 200MB in bytes
+  max_workspace_size: 1073741824 # 1GB in bytes
+  max_file_count: 10000
+
+database:
+  host: "localhost"
+  port: 5432
+  database: "can"
+  user: "can"
+  password: "CHANGE_ME"
+
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+
+proxy:
+  port: 8787
+  rate_limit: 60           # Requests per minute per user
+
+server:
+  port: 3000
+  cors_origins:
+    - "http://localhost:3001"

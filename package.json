@@ -1,0 +1,22 @@
+{
+  "name": "megh",
+  "private": true,
+  "workspaces": [
+    "server",
+    "proxy",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w server\" \"npm run dev -w proxy\" \"npm run dev -w web\"",
+    "build": "npm run build -w server && npm run build -w proxy && npm run build -w web",
+    "start": "concurrently \"npm start -w server\" \"npm start -w proxy\" \"npm start -w web\"",
+    "lint": "eslint . --ext .ts,.tsx",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "@types/node": "^22.0.0"
+  }
+}
