@@ -57,10 +57,10 @@ export function startPortDetection(): void {
   const config = getConfig();
   const domain = config.platform.domain;
 
-  // The set of container-side ports we care about
-  const watchedPorts = [3000, 5173, 8080];
+  // Ports to ignore — these are internal/system services, not user servers
+  const ignoredPorts = new Set([22, 53, 631]);
 
-  console.log('[PortDetector] Starting port detection (interval: 5s)');
+  console.log('[PortDetector] Starting port detection (interval: 5s, dynamic)');
 
   intervalHandle = setInterval(async () => {
     try {
@@ -78,8 +78,8 @@ export function startPortDetection(): void {
           const output = await execCommand(containerId, ['ss', '-tlnp']);
           const listeningPorts = parseSsOutput(output);
 
-          // Filter to only the ports we are interested in
-          const relevantPorts = listeningPorts.filter((p) => watchedPorts.includes(p));
+          // Accept any user port, only skip known system ports
+          const relevantPorts = listeningPorts.filter((p) => !ignoredPorts.has(p));
 
           // Get or create the set of already-detected ports for this session
           if (!detectedPorts.has(sessionId)) {
