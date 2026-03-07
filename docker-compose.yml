@@ -178,7 +178,7 @@ networks:
     name: megh_internal
   containers:
     name: megh_containers
-    driver: bridge
+    external: true
 
 volumes:
   pgdata:
