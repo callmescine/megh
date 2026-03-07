@@ -115,7 +115,7 @@ async function handlePreview(req: Request, res: Response): Promise<void> {
     }
 
     // Build the forwarded path
-    const wildcardPath = req.params[0];
+    const wildcardPath = req.params.path;
     const forwardPath = wildcardPath ? `/${wildcardPath}` : '/';
     const queryEntries = Object.entries(req.query).filter(([k]) => k !== 'token');
     const queryString = queryEntries.length > 0
@@ -155,6 +155,6 @@ async function handlePreview(req: Request, res: Response): Promise<void> {
   }
 }
 
-// Fix #1: Match both /preview/:sessionId/:port and /preview/:sessionId/:port/*
+// Match both /preview/:sessionId/:port and /preview/:sessionId/:port/anything
 previewRouter.all('/:sessionId/:port', handlePreview);
-previewRouter.all('/:sessionId/:port/*', handlePreview);
+previewRouter.all('/:sessionId/:port/:path+', handlePreview);
