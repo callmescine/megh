@@ -73,6 +73,9 @@ services:
       - ./config.docker.yaml:/app/config.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - ./secrets/oauth-token:/app/secrets/oauth-token:ro
+    networks:
+      - default
+      - containers
     ports:
       - "3000:3000"
     healthcheck:

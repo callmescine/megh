@@ -65,7 +65,7 @@ export function startPortDetection(): void {
   intervalHandle = setInterval(async () => {
     try {
       const result = await query(
-        `SELECT id, container_id, port_mappings FROM sessions WHERE status = 'active'`,
+        `SELECT id, container_id FROM sessions WHERE status = 'active'`,
       );
 
       for (const session of result.rows) {
@@ -87,25 +87,13 @@ export function startPortDetection(): void {
           }
           const alreadyDetected = detectedPorts.get(sessionId)!;
 
-          // Parse port_mappings to resolve container port → host port
-          let portMappings: Record<string, number> = {};
-          try {
-            portMappings =
-              typeof session.port_mappings === 'string'
-                ? JSON.parse(session.port_mappings)
-                : session.port_mappings || {};
-          } catch {
-            // ignore parse errors
-          }
-
           for (const port of relevantPorts) {
             if (!alreadyDetected.has(port)) {
               alreadyDetected.add(port);
 
-              const hostPort = portMappings[String(port)];
-              const previewUrl = hostPort
-                ? `https://${domain}/preview/${sessionId}/${hostPort}/`
-                : `https://${sessionId}-${port}.${domain}`;
+              // Use container port directly — the API preview proxy
+              // resolves the container IP and forwards to it
+              const previewUrl = `https://${domain}/preview/${sessionId}/${port}/`;
               console.log(`[PortDetector] New port detected: session=${sessionId} port=${port} url=${previewUrl}`);
 
               broadcastToSession(sessionId, {

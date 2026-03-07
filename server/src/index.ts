@@ -18,6 +18,7 @@ import { initScheduler } from './jobs/scheduler.js';
 import { initRedis, closeRedis } from './db/redis.js';
 import { initTTLSubscriber } from './sessions/session-service.js';
 import { startPortDetection, stopPortDetection } from './preview/port-detector.js';
+import { previewRouter } from './preview/routes.js';
 import { pingDocker } from './sessions/container-manager.js';
 import { adminRouter } from './admin/routes.js';
 import { metricsMiddleware, metricsRouter } from './metrics.js';
@@ -155,6 +156,7 @@ async function main() {
   app.use('/api/sessions', uploadRouter);
   app.use('/api/billing', billingRouter);
   app.use('/api/admin', adminRouter);
+  app.use('/preview', previewRouter);
 
   // HTTP server
   const server = createServer(app);

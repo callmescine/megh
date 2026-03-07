@@ -407,3 +407,28 @@ export async function execInteractive(
 export async function pingDocker(): Promise<void> {
   await docker.ping();
 }
+
+// ---------------------------------------------------------------------------
+// Container IP lookup
+// ---------------------------------------------------------------------------
+
+export async function getContainerIp(containerId: string): Promise<string | null> {
+  try {
+    const container = docker.getContainer(containerId);
+    const info = await container.inspect();
+    const networks = info.NetworkSettings?.Networks;
+    if (!networks) return null;
+
+    // Prefer the megh_containers network
+    const meghNet = networks['megh_containers'];
+    if (meghNet?.IPAddress) return meghNet.IPAddress;
+
+    // Fallback to any available network
+    for (const net of Object.values(networks)) {
+      if ((net as any)?.IPAddress) return (net as any).IPAddress;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
