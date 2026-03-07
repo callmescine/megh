@@ -46,6 +46,10 @@ async function main() {
   // Stripe webhook needs raw body — mount before json parser
   app.use('/webhooks/stripe', stripeWebhookRouter);
 
+  // Preview proxy — mount before json/helmet/csrf to avoid consuming
+  // request body and adding headers that break proxied content
+  app.use('/preview', previewRouter);
+
   app.use(helmet());
   app.use(cors({ origin: config.server.cors_origins, credentials: true }));
   app.use(cookieParser());
@@ -156,7 +160,6 @@ async function main() {
   app.use('/api/sessions', uploadRouter);
   app.use('/api/billing', billingRouter);
   app.use('/api/admin', adminRouter);
-  app.use('/preview', previewRouter);
 
   // HTTP server
   const server = createServer(app);

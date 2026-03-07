@@ -69,6 +69,10 @@ export default function TerminalPage() {
     });
   }, []);
 
+  const handlePreviewClose = useCallback((port: number) => {
+    setPreviewLinks((prev) => prev.filter((l) => l.port !== port));
+  }, []);
+
   const handleDownload = async () => {
     try {
       const blob = await api.sessions.download(sessionId);
@@ -274,6 +278,7 @@ export default function TerminalPage() {
           ref={terminalRef}
           sessionId={sessionId}
           onPreviewUrl={handlePreviewUrl}
+          onPreviewClose={handlePreviewClose}
         />
       </div>
     </div>

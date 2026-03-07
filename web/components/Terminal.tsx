@@ -10,6 +10,7 @@ import '@xterm/xterm/css/xterm.css';
 interface TerminalProps {
   sessionId: string;
   onPreviewUrl?: (url: string, port: number) => void;
+  onPreviewClose?: (port: number) => void;
 }
 
 export interface TerminalHandle {
@@ -18,7 +19,7 @@ export interface TerminalHandle {
 }
 
 const Terminal = forwardRef<TerminalHandle, TerminalProps>(
-  ({ sessionId, onPreviewUrl }, ref) => {
+  ({ sessionId, onPreviewUrl, onPreviewClose }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const termRef = useRef<XTerminal | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
@@ -113,6 +114,12 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(
           }
         });
 
+        ws.on('preview_close', (msg: any) => {
+          if (onPreviewClose && msg.port) {
+            onPreviewClose(msg.port);
+          }
+        });
+
         ws.on('open', () => {
           setConnectionLost(false);
           ws.sendResize(term.rows, term.cols);
@@ -150,7 +157,7 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(
         ws?.disconnect();
         term?.dispose();
       };
-    }, [sessionId, onPreviewUrl]);
+    }, [sessionId, onPreviewUrl, onPreviewClose]);
 
     return (
       <div className="w-full h-full relative">
