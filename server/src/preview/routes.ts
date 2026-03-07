@@ -114,9 +114,11 @@ async function handlePreview(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Build the forwarded path
-    const wildcardPath = req.params.path;
-    const forwardPath = wildcardPath ? `/${wildcardPath}` : '/';
+    // Build the forwarded path — params.path is an array in path-to-regexp v8
+    const rawPath = req.params.path;
+    const forwardPath = rawPath
+      ? '/' + (Array.isArray(rawPath) ? rawPath.join('/') : rawPath)
+      : '/';
     const queryEntries = Object.entries(req.query).filter(([k]) => k !== 'token');
     const queryString = queryEntries.length > 0
       ? '?' + queryEntries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&')
