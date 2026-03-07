@@ -1,39 +1,145 @@
 import Docker from 'dockerode';
-import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
 import { getConfig } from '../config.js';
 import { getRedis } from '../db/redis.js';
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
 // ---------------------------------------------------------------------------
-// macOS Keychain fallback for OAuth token (dev environments)
+// OAuth token from mounted file (host-side script refreshes from Keychain)
 // ---------------------------------------------------------------------------
 
-let cachedKeychainToken: string | null | undefined;
+const OAUTH_TOKEN_FILE = '/app/secrets/oauth-token';
 
-function getKeychainOAuthToken(): string | null {
-  if (cachedKeychainToken !== undefined) return cachedKeychainToken;
+/**
+ * Read the OAuth token from the host-mounted file.
+ * Always reads fresh (no caching) — the host-side refresh script updates
+ * this file when Claude Code CLI rotates the token in Keychain.
+ */
+function getOAuthTokenFromFile(): string | null {
+  try {
+    const token = readFileSync(OAUTH_TOKEN_FILE, 'utf-8').trim();
+    if (token) {
+      return token;
+    }
+  } catch {
+    // File doesn't exist or isn't readable — that's fine
+  }
+  return null;
+}
 
-  if (process.platform !== 'darwin') {
-    cachedKeychainToken = null;
-    return null;
+// ---------------------------------------------------------------------------
+// Anthropic token validation — verify token works before creating a session
+// ---------------------------------------------------------------------------
+
+const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+
+interface TokenValidationResult {
+  valid: boolean;
+  error?: string;
+  oauthToken?: string | null;
+}
+
+/**
+ * Validate that we can reach Claude/Anthropic with the current credentials.
+ * - OAuth tokens (sk-ant-oat01-*): checked using `expiresAt` from keychain
+ *   credential metadata. Always reads fresh from keychain to get the latest
+ *   token (Claude Code CLI refreshes tokens automatically).
+ * - API keys: validated via a minimal Anthropic API call.
+ */
+export async function validateAnthropicAccess(): Promise<TokenValidationResult> {
+  const config = getConfig();
+
+  // Prefer file-based token (refreshed by host-side script) over env var / config
+  // because env vars get stale when the token rotates, but the file is always fresh.
+  const fileToken = getOAuthTokenFromFile();
+  const oauthToken = fileToken || config.llm.oauth_token;
+
+  if (oauthToken) {
+    const source = fileToken ? 'mounted file' : 'config/env';
+    console.log(`[ContainerManager] Found OAuth token from ${source}, validating...`);
+
+    // sk-ant-oat01-* tokens work with x-api-key header against Anthropic API
+    const result = await testApiKey(oauthToken);
+    if (result.valid) {
+      return { valid: true, oauthToken };
+    }
+
+    return {
+      valid: false,
+      error: result.error || `Claude OAuth token (from ${source}) is invalid or expired. Run \`./scripts/refresh-oauth-token.sh\` to update.`,
+    };
   }
 
+  // API key path
+  const apiKey = config.llm.api_key;
+  if (!apiKey || apiKey.startsWith('CHANGE_ME')) {
+    return { valid: false, error: 'No Anthropic API key configured. Set llm.api_key in config or MEGH_LLM_API_KEY environment variable.' };
+  }
+
+  const result = await testApiKey(apiKey);
+  if (result.valid) {
+    return { valid: true, oauthToken: null };
+  }
+
+  return {
+    valid: false,
+    error: result.error || 'Anthropic API key is invalid. Please check your configuration.',
+  };
+}
+
+/**
+ * Validate an API key by making a minimal request to the Anthropic API.
+ */
+async function testApiKey(apiKey: string): Promise<{ valid: boolean; error?: string }> {
   try {
-    const raw = execSync(
-      'security find-generic-password -s "Claude Code-credentials" -w',
-      { encoding: 'utf-8', timeout: 5000 },
-    ).trim();
-    const parsed = JSON.parse(raw);
-    const token = parsed?.claudeAiOauth?.accessToken ?? null;
-    if (token) {
-      console.log('[ContainerManager] Found OAuth token in macOS Keychain');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+
+    const res = await fetch(ANTHROPIC_API_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'anthropic-version': '2023-06-01',
+        'x-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (res.ok) {
+      return { valid: true };
     }
-    cachedKeychainToken = token;
-    return token;
-  } catch {
-    cachedKeychainToken = null;
-    return null;
+
+    const body = await res.json().catch(() => ({})) as Record<string, any>;
+    const apiError = body?.error?.message || res.statusText;
+
+    if (res.status === 401) {
+      return { valid: false, error: `Authentication failed: ${apiError}` };
+    }
+    if (res.status === 403) {
+      return { valid: false, error: `Access denied: ${apiError}` };
+    }
+
+    // 429, 500, 529 etc — Anthropic is reachable but busy/overloaded.
+    // The token itself is valid, so allow session creation.
+    if (res.status === 429 || res.status >= 500) {
+      console.warn(`[ContainerManager] Anthropic returned ${res.status} during validation — token is valid but API may be under load`);
+      return { valid: true };
+    }
+
+    return { valid: false, error: `Anthropic API error (${res.status}): ${apiError}` };
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      return { valid: false, error: 'Could not reach Anthropic API (request timed out). Please check your network connection.' };
+    }
+    return { valid: false, error: `Could not reach Anthropic API: ${err.message}` };
   }
 }
 
@@ -94,6 +200,8 @@ export interface CreateContainerOpts {
   userId: string;
   proxyPort: number;
   ttlMinutes: number;
+  /** Pre-validated OAuth token (if available) — avoids re-reading a stale cache */
+  validatedOAuthToken?: string | null;
 }
 
 export interface CreateContainerResult {
@@ -105,7 +213,7 @@ export async function createContainer(
   opts: CreateContainerOpts,
 ): Promise<CreateContainerResult> {
   const config = getConfig();
-  const { sessionId, userId, proxyPort, ttlMinutes } = opts;
+  const { sessionId, userId, proxyPort, ttlMinutes, validatedOAuthToken } = opts;
 
   const allocatedPorts: number[] = [];
   try {
@@ -133,7 +241,8 @@ export async function createContainer(
   // Build environment variables for the container
   const env: string[] = [`SESSION_ID=${sessionId}`];
 
-  const oauthToken = config.llm.oauth_token || getKeychainOAuthToken();
+  // Use pre-validated token if provided, otherwise fall back to config/file
+  const oauthToken = validatedOAuthToken ?? (config.llm.oauth_token || getOAuthTokenFromFile());
 
   if (oauthToken) {
     // OAuth: container talks directly to Anthropic

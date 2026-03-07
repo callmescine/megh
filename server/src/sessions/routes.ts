@@ -75,6 +75,18 @@ sessionRouter.post('/', sessionCreateLimiter, validate(CreateSessionSchema), asy
       return;
     }
 
+    if (
+      message.includes('Unable to reach Claude') ||
+      message.includes('Authentication failed') ||
+      message.includes('OAuth token is invalid') ||
+      message.includes('API key is invalid') ||
+      message.includes('Could not reach Anthropic') ||
+      message.includes('Access denied')
+    ) {
+      res.status(502).json({ error: message });
+      return;
+    }
+
     if (message.includes('timed out') || message.includes('server is busy')) {
       res.status(503).json({ error: message });
       return;

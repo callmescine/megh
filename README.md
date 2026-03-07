@@ -116,7 +116,7 @@ database:
   password: "a-secure-password"    # PostgreSQL password
 ```
 
-> **OAuth alternative:** If you have a Claude Code OAuth token, set the `MEGH_OAUTH_TOKEN` environment variable instead of `llm.api_key`. OAuth containers talk directly to Anthropic without the usage proxy.
+> **OAuth alternative:** If you use Claude Code's OAuth login (instead of an API key), see the [OAuth Token Setup](#oauth-token-setup) section below.
 
 ### 3. Build and launch
 
@@ -200,11 +200,37 @@ Set these in your shell or a `.env` file alongside `docker-compose.yml`:
 | `DB_PASSWORD` | No | PostgreSQL password (default: `changeme`) |
 | `MEGH_JWT_SECRET` | Yes | JWT signing secret |
 | `MEGH_LLM_API_KEY` | Yes* | Anthropic API key |
-| `MEGH_OAUTH_TOKEN` | Yes* | Claude Code OAuth token (alternative to API key) |
 | `MEGH_STRIPE_SECRET_KEY` | No | Stripe secret key for payments |
 | `MEGH_STRIPE_WEBHOOK_SECRET` | No | Stripe webhook signing secret |
 
-*One of `MEGH_LLM_API_KEY` or `MEGH_OAUTH_TOKEN` is required.
+*Required unless using OAuth token setup (see below).
+
+### OAuth Token Setup
+
+If you authenticate Claude Code via OAuth (`claude` CLI login) rather than an API key, Megh can use your OAuth token automatically. Since OAuth tokens rotate every few hours, a host-side script keeps them in sync.
+
+**How it works:**
+1. A cron job runs `scripts/refresh-oauth-token.sh` every 5 minutes on the host
+2. The script reads the latest token from macOS Keychain and writes it to `secrets/oauth-token`
+3. This file is volume-mounted into the API container (read-only)
+4. The server reads the file fresh on every session creation — always uses the latest token
+
+**One-time setup:**
+
+```bash
+# 1. Make sure you're logged in to Claude Code
+claude
+
+# 2. Run the refresh script to write the initial token
+./scripts/refresh-oauth-token.sh
+
+# 3. Set up a cron job to keep the token fresh (every 5 minutes)
+(crontab -l 2>/dev/null; echo "*/5 * * * * $(pwd)/scripts/refresh-oauth-token.sh >> $(pwd)/secrets/refresh.log 2>&1") | crontab -
+```
+
+**Token validation:** Before creating any session, the server validates the token against the Anthropic API. If the token is expired or invalid, the user sees a clear error message instead of a broken session.
+
+> **Note:** The `secrets/` directory is git-ignored and should never be committed.
 
 ## Project Structure
 
@@ -234,6 +260,10 @@ megh/
 ├── nginx/                   # Reverse proxy config
 │   ├── nginx.conf           # Main config with WebSocket & preview routing
 │   └── preview.conf         # Session port preview routing
+├── scripts/                 # Host-side utility scripts
+│   └── refresh-oauth-token.sh  # Syncs OAuth token from Keychain to file
+├── secrets/                 # Mounted secrets (git-ignored)
+│   └── oauth-token          # Current OAuth token (auto-refreshed)
 ├── config.example.yaml      # Configuration template
 ├── docker-compose.yml       # Production compose file
 ├── docker-compose.dev.yml   # Development overrides

@@ -52,6 +52,12 @@ export async function createSession(
   const redis = getRedis();
   const pool = getPool();
 
+  // Validate Anthropic credentials before reserving any resources
+  const tokenCheck = await containerManager.validateAnthropicAccess();
+  if (!tokenCheck.valid) {
+    throw new Error(tokenCheck.error || 'Unable to reach Claude. Cannot create session.');
+  }
+
   // Use a dedicated client for the transaction so the advisory lock holds
   const client = await pool.connect();
 
@@ -174,6 +180,7 @@ export async function createSession(
         userId,
         proxyPort: config.proxy.port,
         ttlMinutes,
+        validatedOAuthToken: tokenCheck.oauthToken,
       });
       await containerManager.startContainer(created.containerId);
       return created;
