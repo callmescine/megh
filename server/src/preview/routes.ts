@@ -157,4 +157,4 @@ async function handlePreview(req: Request, res: Response): Promise<void> {
 
 // Match both /preview/:sessionId/:port and /preview/:sessionId/:port/anything
 previewRouter.all('/:sessionId/:port', handlePreview);
-previewRouter.all('/:sessionId/:port/:path+', handlePreview);
+previewRouter.all('/:sessionId/:port/{*path}', handlePreview);
