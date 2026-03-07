@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, isTarFile } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { addToast } from '@/lib/toast';
 import Terminal from '@/components/Terminal';
@@ -100,15 +100,16 @@ export default function TerminalPage() {
     if (files.length === 0) return;
     setUploading(true);
     try {
-      const isTar = files.length === 1 && /\.(tar|tar\.gz|tgz)$/i.test(files[0].name);
+      const isTar = files.length === 1 && isTarFile(files[0].name);
       if (isTar) {
         await api.sessions.upload(sessionId, files[0]);
       } else {
         await api.sessions.uploadMedia(sessionId, files);
       }
       addToast(`${files.length} file(s) uploaded to workspace`, 'success');
-    } catch (err: any) {
-      addToast(err.message || 'Upload failed', 'error');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      addToast(message, 'error');
     } finally {
       setUploading(false);
     }

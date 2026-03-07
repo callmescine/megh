@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
-import { api } from '@/lib/api';
+import { api, isTarFile } from '@/lib/api';
 import { addToast } from '@/lib/toast';
 import { UserLayout } from '@/components/layouts/user-layout';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -98,7 +98,7 @@ export default function DashboardPage() {
       if (preloadFiles.length > 0) {
         try {
           // If single tar file, use the tar upload endpoint
-          const isTar = preloadFiles.length === 1 && /\.(tar|tar\.gz|tgz)$/i.test(preloadFiles[0].name);
+          const isTar = preloadFiles.length === 1 && isTarFile(preloadFiles[0].name);
           if (isTar) {
             await api.sessions.upload(session.id, preloadFiles[0]);
           } else {

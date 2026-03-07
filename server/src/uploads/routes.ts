@@ -95,11 +95,22 @@ uploadRouter.post(
 
 function getMultiUpload() {
   const config = getConfig();
+  const maxTotal = config.uploads.max_workspace_size;
+  let accumulated = 0;
   return multer({
     storage: multer.memoryStorage(),
     limits: {
       fileSize: config.uploads.max_file_size,
       files: 50,
+    },
+    fileFilter: (_req, file, cb) => {
+      // Reject path traversal early before buffering
+      const name = file.originalname;
+      if (name.includes('..') || name.startsWith('/')) {
+        cb(new Error(`Invalid filename: "${name}"`));
+        return;
+      }
+      cb(null, true);
     },
   });
 }

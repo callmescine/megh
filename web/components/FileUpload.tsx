@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { api } from '@/lib/api';
+import { api, isTarFile } from '@/lib/api';
 import { addToast } from '@/lib/toast';
 
 interface FileUploadProps {
@@ -19,17 +19,12 @@ export default function FileUpload({ sessionId, onUploadComplete, disabled = fal
   const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isTarFile = (file: File): boolean => {
-    const name = file.name.toLowerCase();
-    return name.endsWith('.tar') || name.endsWith('.tar.gz') || name.endsWith('.tgz');
-  };
-
   const handleUpload = useCallback(
     async (files: File[]) => {
       if (files.length === 0) return;
 
       // If single tar file, use the existing tar upload endpoint
-      if (files.length === 1 && isTarFile(files[0])) {
+      if (files.length === 1 && isTarFile(files[0].name)) {
         setUploadLabel(files[0].name);
         setState('uploading');
         setErrorMessage('');
@@ -44,10 +39,11 @@ export default function FileUpload({ sessionId, onUploadComplete, disabled = fal
           addToast('Archive uploaded successfully', 'success');
           onUploadComplete?.();
           setTimeout(() => setState('idle'), 3000);
-        } catch (err: any) {
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Upload failed';
           setState('error');
-          setErrorMessage(err.message || 'Upload failed');
-          addToast(err.message || 'Upload failed', 'error');
+          setErrorMessage(message);
+          addToast(message, 'error');
         }
         return;
       }
@@ -68,10 +64,11 @@ export default function FileUpload({ sessionId, onUploadComplete, disabled = fal
         addToast(`${files.length} file(s) uploaded successfully`, 'success');
         onUploadComplete?.();
         setTimeout(() => setState('idle'), 3000);
-      } catch (err: any) {
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Upload failed';
         setState('error');
-        setErrorMessage(err.message || 'Upload failed');
-        addToast(err.message || 'Upload failed', 'error');
+        setErrorMessage(message);
+        addToast(message, 'error');
       }
     },
     [sessionId, onUploadComplete]

@@ -289,4 +289,8 @@ export const api = {
   },
 };
 
+export function isTarFile(name: string): boolean {
+  return /\.(tar|tar\.gz|tgz)$/i.test(name);
+}
+
 export { ApiError };
