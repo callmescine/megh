@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { Readable } from 'stream';
 import { createGzip } from 'zlib';
 import multer from 'multer';
+import tar from 'tar-stream';
 import { requireAuth } from '../auth/middleware.js';
 import { getSession } from '../sessions/session-service.js';
 import { injectFiles, extractWorkspace, validateTarStream } from './stream-service.js';
@@ -83,6 +84,97 @@ uploadRouter.post(
         return;
       }
 
+      res.status(500).json({ error: 'Failed to upload files' });
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /:id/upload-media — upload individual files into a session's container
+// ---------------------------------------------------------------------------
+
+function getMultiUpload() {
+  const config = getConfig();
+  const maxTotal = config.uploads.max_workspace_size;
+  let accumulated = 0;
+  return multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: config.uploads.max_file_size,
+      files: 50,
+    },
+    fileFilter: (_req, file, cb) => {
+      // Reject path traversal early before buffering
+      const name = file.originalname;
+      if (name.includes('..') || name.startsWith('/')) {
+        cb(new Error(`Invalid filename: "${name}"`));
+        return;
+      }
+      cb(null, true);
+    },
+  });
+}
+
+uploadRouter.post(
+  '/:id/upload-media',
+  requireAuth,
+  (req, res, next) => getMultiUpload().array('files', 50)(req, res, next),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = req.user!.id;
+      const session = await getSession(req.params.id as string, userId);
+
+      if (!session) {
+        res.status(404).json({ error: 'Session not found' });
+        return;
+      }
+
+      if (session.status !== 'active' && session.status !== 'creating') {
+        res.status(400).json({ error: `Cannot upload to session with status "${session.status}"` });
+        return;
+      }
+
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        res.status(400).json({ error: 'No files provided. Upload files using the "files" field.' });
+        return;
+      }
+
+      const config = getConfig();
+      let totalSize = 0;
+      for (const file of files) {
+        totalSize += file.size;
+        if (totalSize > config.uploads.max_workspace_size) {
+          res.status(400).json({ error: `Total upload size exceeds maximum of ${config.uploads.max_workspace_size} bytes` });
+          return;
+        }
+      }
+
+      // Validate filenames — reject path traversal
+      for (const file of files) {
+        const name = file.originalname;
+        if (name.includes('..') || name.startsWith('/')) {
+          res.status(400).json({ error: `Invalid filename: "${name}"` });
+          return;
+        }
+      }
+
+      // Pack individual files into a tar stream for injection
+      const pack = tar.pack();
+      for (const file of files) {
+        pack.entry({ name: file.originalname, size: file.size }, file.buffer);
+      }
+      pack.finalize();
+
+      await injectFiles(session.container_id, pack);
+
+      res.status(200).json({
+        message: `${files.length} file(s) uploaded`,
+        files: files.map((f) => f.originalname),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[Uploads] Media upload error:', message);
       res.status(500).json({ error: 'Failed to upload files' });
     }
   },

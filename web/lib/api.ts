@@ -146,6 +146,55 @@ function apiUpload<T>(
   });
 }
 
+// Upload multiple files with real progress
+function apiUploadMultiple<T>(
+  path: string,
+  files: File[],
+  onProgress?: (percent: number) => void,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const token = getToken();
+    const csrfToken = getCsrfToken();
+    const xhr = new XMLHttpRequest();
+
+    xhr.open('POST', `${API_URL}${path}`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    if (csrfToken) xhr.setRequestHeader('X-CSRF-Token', csrfToken);
+    xhr.withCredentials = true;
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          resolve({} as T);
+        }
+      } else {
+        try {
+          const body = JSON.parse(xhr.responseText);
+          reject(new ApiError(xhr.status, body.error || 'Upload failed'));
+        } catch {
+          reject(new ApiError(xhr.status, 'Upload failed'));
+        }
+      }
+    };
+
+    xhr.onerror = () => reject(new ApiError(0, 'Network error'));
+
+    const formData = new FormData();
+    for (const file of files) {
+      formData.append('files', file);
+    }
+    xhr.send(formData);
+  });
+}
+
 export const api = {
   auth: {
     register(email: string, password: string) {
@@ -205,6 +254,13 @@ export const api = {
     upload(id: string, file: File, onProgress?: (percent: number) => void) {
       return apiUpload<any>(`/api/sessions/${id}/upload`, file, onProgress);
     },
+    uploadMedia(id: string, files: File[], onProgress?: (percent: number) => void) {
+      return apiUploadMultiple<{ message: string; files: string[] }>(
+        `/api/sessions/${id}/upload-media`,
+        files,
+        onProgress,
+      );
+    },
     download(id: string) {
       return apiFetchBlob(`/api/sessions/${id}/download`);
     },
@@ -232,5 +288,9 @@ export const api = {
     },
   },
 };
+
+export function isTarFile(name: string): boolean {
+  return /\.(tar|tar\.gz|tgz)$/i.test(name);
+}
 
 export { ApiError };

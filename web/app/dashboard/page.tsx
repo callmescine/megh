@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
-import { api } from '@/lib/api';
+import { api, isTarFile } from '@/lib/api';
 import { addToast } from '@/lib/toast';
 import { UserLayout } from '@/components/layouts/user-layout';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -25,7 +25,7 @@ export default function DashboardPage() {
   const [ttl, setTtl] = useState(60);
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState('');
-  const [preloadFile, setPreloadFile] = useState<File | null>(null);
+  const [preloadFiles, setPreloadFiles] = useState<File[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [pastPage, setPastPage] = useState(1);
   const [estimatedCost, setEstimatedCost] = useState<string | null>(null);
@@ -95,10 +95,16 @@ export default function DashboardPage() {
     try {
       const session = await api.sessions.create(ttl);
 
-      if (preloadFile) {
+      if (preloadFiles.length > 0) {
         try {
-          await api.sessions.upload(session.id, preloadFile);
-          addToast('Session launched with file uploaded', 'success');
+          // If single tar file, use the tar upload endpoint
+          const isTar = preloadFiles.length === 1 && isTarFile(preloadFiles[0].name);
+          if (isTar) {
+            await api.sessions.upload(session.id, preloadFiles[0]);
+          } else {
+            await api.sessions.uploadMedia(session.id, preloadFiles);
+          }
+          addToast('Session launched with files uploaded', 'success');
         } catch {
           addToast('Session launched but file upload failed', 'warning');
         }
@@ -173,38 +179,55 @@ export default function DashboardPage() {
                 </label>
                 <div
                   className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-                    preloadFile
+                    preloadFiles.length > 0
                       ? 'border-green-600 bg-green-900/10'
                       : 'border-surface-300 hover:border-surface-500'
                   }`}
                   onClick={() => {
                     const input = document.createElement('input');
                     input.type = 'file';
-                    input.accept = '.tar,.tgz,application/gzip,application/x-tar';
+                    input.multiple = true;
                     input.onchange = (e) => {
-                      const file = (e.target as HTMLInputElement).files?.[0];
-                      if (file) {
-                        setPreloadFile(file);
-                        addToast(`Selected: ${file.name}`, 'info');
+                      const fileList = (e.target as HTMLInputElement).files;
+                      if (fileList && fileList.length > 0) {
+                        const selected = Array.from(fileList);
+                        setPreloadFiles((prev) => [...prev, ...selected]);
+                        const label = selected.length === 1 ? selected[0].name : `${selected.length} files`;
+                        addToast(`Selected: ${label}`, 'info');
                       }
                     };
                     input.click();
                   }}
                 >
-                  {preloadFile ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="text-sm text-green-400">{preloadFile.name}</span>
+                  {preloadFiles.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-center gap-2">
+                        {preloadFiles.map((f, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 text-xs bg-surface-200 text-green-400 rounded px-2 py-1">
+                            {f.name}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreloadFiles((prev) => prev.filter((_, j) => j !== i));
+                              }}
+                              className="text-gray-500 hover:text-red-400 transition-colors ml-1"
+                            >
+                              &times;
+                            </button>
+                          </span>
+                        ))}
+                      </div>
                       <button
-                        onClick={(e) => { e.stopPropagation(); setPreloadFile(null); }}
+                        onClick={(e) => { e.stopPropagation(); setPreloadFiles([]); }}
                         className="text-xs text-gray-500 hover:text-red-400 transition-colors"
                       >
-                        Remove
+                        Clear all
                       </button>
                     </div>
                   ) : (
                     <div>
-                      <p className="text-sm text-gray-400">Click to select a file</p>
-                      <p className="text-xs text-gray-600 mt-1">.tar, .tar.gz, .tgz</p>
+                      <p className="text-sm text-gray-400">Click to select files</p>
+                      <p className="text-xs text-gray-600 mt-1">Any file type — images, code, archives, etc.</p>
                     </div>
                   )}
                 </div>

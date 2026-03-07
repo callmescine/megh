@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { api } from '@/lib/api';
+import { api, isTarFile } from '@/lib/api';
 import { addToast } from '@/lib/toast';
 
 interface FileUploadProps {
@@ -15,43 +15,60 @@ type UploadState = 'idle' | 'dragover' | 'uploading' | 'done' | 'error';
 export default function FileUpload({ sessionId, onUploadComplete, disabled = false }: FileUploadProps) {
   const [state, setState] = useState<UploadState>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
-  const [fileName, setFileName] = useState<string>('');
+  const [uploadLabel, setUploadLabel] = useState<string>('');
   const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const acceptedTypes = ['.tar', '.tar.gz', '.tgz'];
-
-  const isValidFile = (file: File): boolean => {
-    const name = file.name.toLowerCase();
-    return acceptedTypes.some((ext) => name.endsWith(ext));
-  };
-
   const handleUpload = useCallback(
-    async (file: File) => {
-      if (!isValidFile(file)) {
-        setState('error');
-        setErrorMessage('Invalid file type. Accepted: .tar, .tar.gz, .tgz');
+    async (files: File[]) => {
+      if (files.length === 0) return;
+
+      // If single tar file, use the existing tar upload endpoint
+      if (files.length === 1 && isTarFile(files[0].name)) {
+        setUploadLabel(files[0].name);
+        setState('uploading');
+        setErrorMessage('');
+        setProgress(0);
+
+        try {
+          await api.sessions.upload(sessionId, files[0], (percent) => {
+            setProgress(percent);
+          });
+          setState('done');
+          setProgress(100);
+          addToast('Archive uploaded successfully', 'success');
+          onUploadComplete?.();
+          setTimeout(() => setState('idle'), 3000);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Upload failed';
+          setState('error');
+          setErrorMessage(message);
+          addToast(message, 'error');
+        }
         return;
       }
 
-      setFileName(file.name);
+      // Otherwise, use the media upload endpoint for individual files
+      const label = files.length === 1 ? files[0].name : `${files.length} files`;
+      setUploadLabel(label);
       setState('uploading');
       setErrorMessage('');
       setProgress(0);
 
       try {
-        await api.sessions.upload(sessionId, file, (percent) => {
+        await api.sessions.uploadMedia(sessionId, files, (percent) => {
           setProgress(percent);
         });
         setState('done');
         setProgress(100);
-        addToast('File uploaded successfully', 'success');
+        addToast(`${files.length} file(s) uploaded successfully`, 'success');
         onUploadComplete?.();
         setTimeout(() => setState('idle'), 3000);
-      } catch (err: any) {
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Upload failed';
         setState('error');
-        setErrorMessage(err.message || 'Upload failed');
-        addToast(err.message || 'Upload failed', 'error');
+        setErrorMessage(message);
+        addToast(message, 'error');
       }
     },
     [sessionId, onUploadComplete]
@@ -79,9 +96,9 @@ export default function FileUpload({ sessionId, onUploadComplete, disabled = fal
       if (disabled) return;
 
       setState('idle');
-      const files = e.dataTransfer.files;
-      if (files.length > 0) {
-        handleUpload(files[0]);
+      const fileList = e.dataTransfer.files;
+      if (fileList.length > 0) {
+        handleUpload(Array.from(fileList));
       }
     },
     [disabled, handleUpload]
@@ -89,10 +106,12 @@ export default function FileUpload({ sessionId, onUploadComplete, disabled = fal
 
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (files && files.length > 0) {
-        handleUpload(files[0]);
+      const fileList = e.target.files;
+      if (fileList && fileList.length > 0) {
+        handleUpload(Array.from(fileList));
       }
+      // Reset so the same files can be selected again
+      e.target.value = '';
     },
     [handleUpload]
   );
@@ -123,7 +142,7 @@ export default function FileUpload({ sessionId, onUploadComplete, disabled = fal
       <input
         ref={fileInputRef}
         type="file"
-        accept=".tar,.tgz,application/gzip,application/x-tar,application/x-gzip,application/x-compressed-tar"
+        multiple
         onChange={handleFileSelect}
         className="hidden"
       />
@@ -131,22 +150,22 @@ export default function FileUpload({ sessionId, onUploadComplete, disabled = fal
       {state === 'idle' && (
         <div>
           <p className="text-sm text-gray-400">
-            Drag and drop a file here, or click to select
+            Drag and drop files here, or click to select
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            Accepted: .tar, .tar.gz, .tgz
+            Any file type supported — images, videos, documents, archives, etc.
           </p>
         </div>
       )}
 
       {state === 'dragover' && (
-        <p className="text-sm text-blue-400">Drop file to upload</p>
+        <p className="text-sm text-blue-400">Drop files to upload</p>
       )}
 
       {state === 'uploading' && (
         <div>
           <p className="text-sm text-amber-400">
-            Uploading {fileName}... {progress}%
+            Uploading {uploadLabel}... {progress}%
           </p>
           <div className="mt-2 h-1 bg-surface-300 rounded-full overflow-hidden">
             <div
