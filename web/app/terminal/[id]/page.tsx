@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { addToast } from '@/lib/toast';
 import Terminal from '@/components/Terminal';
 import type { TerminalHandle } from '@/components/Terminal';
 import TTLBanner from '@/components/TTLBanner';
@@ -30,6 +31,8 @@ export default function TerminalPage() {
   const [error, setError] = useState('');
   const [previewLinks, setPreviewLinks] = useState<PreviewLink[]>([]);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -93,6 +96,24 @@ export default function TerminalPage() {
     }
   };
 
+  const handleUploadFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const isTar = files.length === 1 && /\.(tar|tar\.gz|tgz)$/i.test(files[0].name);
+      if (isTar) {
+        await api.sessions.upload(sessionId, files[0]);
+      } else {
+        await api.sessions.uploadMedia(sessionId, files);
+      }
+      addToast(`${files.length} file(s) uploaded to workspace`, 'success');
+    } catch (err: any) {
+      addToast(err.message || 'Upload failed', 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (loading || authLoading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-surface-0 gap-6">
@@ -141,6 +162,27 @@ export default function TerminalPage() {
 
         <div className="flex items-center gap-2">
           {previewLinks.length > 0 && <PreviewLinks links={previewLinks} />}
+
+          <input
+            ref={uploadInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0) {
+                handleUploadFiles(Array.from(e.target.files));
+              }
+              e.target.value = '';
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => uploadInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? 'Uploading...' : 'Upload'}
+          </Button>
 
           <Button variant="outline" size="sm" onClick={handleDownload}>
             Download
