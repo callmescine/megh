@@ -59,7 +59,8 @@ export default function DashboardPage() {
       if (res.ok) {
         const data = await res.json();
         if (data.estimated_cost > 0) {
-          setEstimatedCost(`$${data.estimated_cost.toFixed(2)}`);
+          const sym = (data.currency || 'USD') === 'INR' ? '\u20B9' : '$';
+          setEstimatedCost(`${sym}${data.estimated_cost.toFixed(2)}`);
         } else {
           setEstimatedCost(null);
         }
@@ -136,7 +137,7 @@ export default function DashboardPage() {
       <div className="space-y-8">
         <PageHeader
           title="Welcome back"
-          description={`Balance: $${(user.balance ?? 0).toFixed(2)}`}
+          description={`Balance: ${user.currency === 'INR' ? '\u20B9' : '$'}${(user.balance_display ?? user.balance ?? 0).toFixed(2)}`}
         />
 
         {/* New Session */}

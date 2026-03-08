@@ -2,13 +2,13 @@ import { execCommand } from '../sessions/container-manager.js';
 import { broadcastToSession } from '../terminal/ws-handler.js';
 import { query } from '../db/connection.js';
 import { getConfig } from '../config.js';
+import { signPreviewToken } from './routes.js';
 
 /**
- * Tracks which ports have already been broadcast per session,
- * so we don't send duplicate "preview" events.
- * Key = sessionId, Value = Set of port numbers already announced.
+ * Tracks currently active ports per session.
+ * Key = sessionId, Value = Set of port numbers currently listening.
  */
-const detectedPorts = new Map<string, Set<number>>();
+const activePorts = new Map<string, Set<number>>();
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
 
@@ -57,56 +57,43 @@ export function startPortDetection(): void {
   const config = getConfig();
   const domain = config.platform.domain;
 
-  // The set of container-side ports we care about
-  const watchedPorts = [3000, 5173, 8080];
+  // Ports to ignore — these are internal/system services, not user servers
+  const ignoredPorts = new Set([22, 53, 631]);
 
-  console.log('[PortDetector] Starting port detection (interval: 5s)');
+  console.log('[PortDetector] Starting port detection (interval: 5s, dynamic)');
 
   intervalHandle = setInterval(async () => {
     try {
       const result = await query(
-        `SELECT id, container_id, port_mappings FROM sessions WHERE status = 'active'`,
+        `SELECT id, container_id FROM sessions WHERE status = 'active'`,
       );
+
+      // Track which sessions are still active to clean up stale entries
+      const activeSessionIds = new Set<string>();
 
       for (const session of result.rows) {
         const sessionId: string = session.id;
         const containerId: string = session.container_id;
 
+        activeSessionIds.add(sessionId);
         if (!containerId) continue;
 
         try {
           const output = await execCommand(containerId, ['ss', '-tlnp']);
           const listeningPorts = parseSsOutput(output);
 
-          // Filter to only the ports we are interested in
-          const relevantPorts = listeningPorts.filter((p) => watchedPorts.includes(p));
+          // Accept any user port, only skip known system ports
+          const currentPorts = new Set(listeningPorts.filter((p) => !ignoredPorts.has(p)));
 
-          // Get or create the set of already-detected ports for this session
-          if (!detectedPorts.has(sessionId)) {
-            detectedPorts.set(sessionId, new Set());
-          }
-          const alreadyDetected = detectedPorts.get(sessionId)!;
+          // Get previously known ports for this session
+          const previousPorts = activePorts.get(sessionId) || new Set<number>();
 
-          // Parse port_mappings to resolve container port → host port
-          let portMappings: Record<string, number> = {};
-          try {
-            portMappings =
-              typeof session.port_mappings === 'string'
-                ? JSON.parse(session.port_mappings)
-                : session.port_mappings || {};
-          } catch {
-            // ignore parse errors
-          }
-
-          for (const port of relevantPorts) {
-            if (!alreadyDetected.has(port)) {
-              alreadyDetected.add(port);
-
-              const hostPort = portMappings[String(port)];
-              const previewUrl = hostPort
-                ? `https://${domain}/preview/${sessionId}/${hostPort}/`
-                : `https://${sessionId}-${port}.${domain}`;
-              console.log(`[PortDetector] New port detected: session=${sessionId} port=${port} url=${previewUrl}`);
+          // Detect new ports
+          for (const port of currentPorts) {
+            if (!previousPorts.has(port)) {
+              const token = signPreviewToken(sessionId, port);
+              const previewUrl = `https://${domain}/preview/${sessionId}/${port}/?token=${token}`;
+              console.log(`[PortDetector] Port opened: session=${sessionId} port=${port}`);
 
               broadcastToSession(sessionId, {
                 type: 'preview',
@@ -115,12 +102,34 @@ export function startPortDetection(): void {
               });
             }
           }
+
+          // Detect removed ports
+          for (const port of previousPorts) {
+            if (!currentPorts.has(port)) {
+              console.log(`[PortDetector] Port closed: session=${sessionId} port=${port}`);
+
+              broadcastToSession(sessionId, {
+                type: 'preview_close',
+                port,
+              });
+            }
+          }
+
+          // Update tracked state
+          activePorts.set(sessionId, currentPorts);
         } catch (err) {
           // Container might be starting up or shutting down — skip silently
           console.debug(
             `[PortDetector] Failed to check ports for session ${sessionId}:`,
             (err as Error).message,
           );
+        }
+      }
+
+      // Fix #3: Clean up entries for sessions that are no longer active
+      for (const sessionId of activePorts.keys()) {
+        if (!activeSessionIds.has(sessionId)) {
+          activePorts.delete(sessionId);
         }
       }
     } catch (err) {
@@ -136,7 +145,7 @@ export function stopPortDetection(): void {
   if (intervalHandle) {
     clearInterval(intervalHandle);
     intervalHandle = null;
-    detectedPorts.clear();
+    activePorts.clear();
     console.log('[PortDetector] Stopped');
   }
 }

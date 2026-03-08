@@ -13,7 +13,12 @@ import { Spinner } from '@/components/ui/spinner';
 interface Invoice {
   id: string;
   created_at: string;
+  created?: number;
   amount: number;
+  amount_due?: number;
+  amount_paid?: number;
+  currency?: string;
+  provider?: string;
   status: string;
   hosted_invoice_url?: string;
 }
@@ -59,6 +64,7 @@ export default function InvoicesPage() {
                 <TableHead>
                   <tr>
                     <TableHeaderCell>Date</TableHeaderCell>
+                    <TableHeaderCell>Provider</TableHeaderCell>
                     <TableHeaderCell className="text-right">Amount</TableHeaderCell>
                     <TableHeaderCell>Status</TableHeaderCell>
                     <TableHeaderCell className="text-right">Actions</TableHeaderCell>
@@ -67,7 +73,7 @@ export default function InvoicesPage() {
                 <TableBody>
                   {invoices.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center text-gray-500 py-8">
+                      <TableCell colSpan={5} className="text-center text-gray-500 py-8">
                         No invoices yet
                       </TableCell>
                     </TableRow>
@@ -75,12 +81,16 @@ export default function InvoicesPage() {
                     invoices.map((invoice) => (
                       <TableRow key={invoice.id}>
                         <TableCell className="text-gray-300 whitespace-nowrap">
-                          {new Date(invoice.created_at).toLocaleDateString(undefined, {
+                          {new Date(invoice.created ? invoice.created * 1000 : invoice.created_at).toLocaleDateString(undefined, {
                             year: 'numeric', month: 'short', day: 'numeric',
                           })}
                         </TableCell>
+                        <TableCell className="text-gray-400 capitalize">
+                          {invoice.provider || 'stripe'}
+                        </TableCell>
                         <TableCell className="text-right text-gray-200 font-medium">
-                          ${((invoice.amount || 0) / 100).toFixed(2)}
+                          {(invoice.currency || 'usd').toUpperCase() === 'INR' ? '\u20B9' : '$'}
+                          {((invoice.amount_due || invoice.amount || 0) / 100).toFixed(2)}
                         </TableCell>
                         <TableCell>
                           <Badge variant={statusVariant(invoice.status)}>{invoice.status}</Badge>

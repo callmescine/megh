@@ -63,7 +63,7 @@ export function UserLayout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-4">
             <span className="hidden sm:inline text-sm text-gray-400">{user.email}</span>
             <span className="text-sm font-medium text-green-400">
-              ${(user.balance ?? 0).toFixed(2)}
+              {user.currency === 'INR' ? '\u20B9' : '$'}{(user.balance_display ?? user.balance ?? 0).toFixed(2)}
             </span>
             <button
               onClick={logout}

@@ -33,6 +33,15 @@ billing:
   # Stripe keys (leave blank to disable Stripe)
   stripe_secret_key: ""
   stripe_publishable_key: ""
+  # Razorpay keys (leave blank to disable Razorpay)
+  razorpay_key_id: ""
+  razorpay_key_secret: ""
+  razorpay_webhook_secret: ""
+  # Currency settings
+  default_currency: "USD"
+  supported_currencies: ["USD", "INR"]
+  exchange_rates:
+    INR: 83  # INR per USD (update periodically or use an API)
   markup_multiplier: 2.0  # Cost multiplier on top of Anthropic pricing
   trial_credits: 2.00     # USD credits for new accounts
   # Model pricing (per 1M tokens)

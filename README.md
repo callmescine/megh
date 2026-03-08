@@ -35,7 +35,8 @@ Think of it as your own private cloud IDE powered by Claude, with built-in user 
 - **Browser terminal** — Full xterm.js terminal over WebSocket, no SSH required
 - **Session lifecycle** — Automatic TTL, grace periods, and cleanup of idle containers
 - **User authentication** — JWT-based auth with registration, login, and automatic token refresh
-- **Usage billing** — Per-hour session billing with balance tracking and monthly limits
+- **Usage billing** — Per-hour session billing with balance tracking and monthly limits, multi-currency (INR/USD)
+- **Multiple payment providers** — Razorpay (UPI, netbanking, wallets) for Indian users, Stripe for international users
 - **File transfer** — Upload files to and download workspaces from containers as tar archives
 - **Port previews** — Access web apps running inside containers via `/preview/{session}/{port}/`
 - **Admin dashboard** — Manage users, sessions, pricing, and monitor system health
@@ -149,7 +150,7 @@ Once services are healthy:
 | http://localhost | Web UI (via nginx) |
 | http://localhost:3000/api/docs | API documentation |
 
-Register an account, and you're ready to launch your first session. New accounts start with **$2.00 trial credits**.
+Register an account, and you're ready to launch your first session. New accounts get **₹99 free credits** (Indian users) or **$0.99** (international users), auto-detected by timezone.
 
 ## How It Works
 
@@ -157,7 +158,7 @@ Register an account, and you're ready to launch your first session. New accounts
 
 1. **Create** — User requests a session. API checks balance, enforces concurrency limits, and spins up an isolated Docker container with resource caps.
 2. **Active** — User interacts via browser terminal (xterm.js over WebSocket). Files can be uploaded/downloaded. Dev server ports are exposed as preview URLs.
-3. **Billing** — Session time is tracked and billed at the configured rate (default $0.50/hour). Balance is deducted when the session ends.
+3. **Billing** — Session time is tracked and billed at the configured rate (₹49/hr for INR, $0.49/hr for USD). Balance is deducted when the session ends.
 4. **Expiring** — When TTL expires, the container is stopped and the session enters a grace period.
 5. **Grace** — User has 15 minutes (configurable) to download their workspace.
 6. **Destroyed** — Container and all data are permanently removed.
@@ -189,7 +190,11 @@ All configuration lives in `config.yaml`. See [`config.example.yaml`](config.exa
 | `containers.ttl_default` | `120` | Session TTL in minutes |
 | `containers.grace_period` | `15` | Grace period before destruction (minutes) |
 | `containers.min_balance` | `0.50` | Minimum USD balance to start a session |
-| `billing.trial_credits` | `2.00` | Credits for new accounts |
+| `billing.trial_credits` | `2.00` | Default credits for new accounts (overridden by geo-detection) |
+| `billing.razorpay_key_id` | — | Razorpay Key ID (leave blank to disable) |
+| `billing.razorpay_key_secret` | — | Razorpay Key Secret |
+| `billing.default_currency` | `USD` | Default display currency |
+| `billing.exchange_rates.INR` | `83` | INR per USD exchange rate |
 
 ### Environment variables
 
@@ -202,6 +207,9 @@ Set these in your shell or a `.env` file alongside `docker-compose.yml`:
 | `MEGH_LLM_API_KEY` | Yes* | Anthropic API key |
 | `MEGH_STRIPE_SECRET_KEY` | No | Stripe secret key for payments |
 | `MEGH_STRIPE_WEBHOOK_SECRET` | No | Stripe webhook signing secret |
+| `MEGH_RAZORPAY_KEY_ID` | No | Razorpay Key ID |
+| `MEGH_RAZORPAY_KEY_SECRET` | No | Razorpay Key Secret |
+| `MEGH_RAZORPAY_WEBHOOK_SECRET` | No | Razorpay webhook signing secret |
 
 *Required unless using OAuth token setup (see below).
 
@@ -239,7 +247,7 @@ megh/
 ├── server/                  # Express API server
 │   └── src/
 │       ├── auth/            # JWT authentication & middleware
-│       ├── billing/         # Usage tracking, balance, pricing
+│       ├── billing/         # Usage tracking, balance, pricing, Stripe & Razorpay
 │       ├── sessions/        # Session lifecycle & container management
 │       ├── terminal/        # WebSocket terminal handler
 │       ├── uploads/         # File upload/download (tar streaming)
@@ -345,8 +353,11 @@ npm run dev    # Starts API, proxy, and Next.js concurrently with hot reload
 | `GET` | `/api/billing/balance` | Balance + monthly usage |
 | `GET` | `/api/billing/usage` | Paginated usage history |
 | `GET` | `/api/billing/usage/:sessionId` | Per-session usage breakdown |
-| `POST` | `/api/billing/topup` | Create Stripe checkout session |
+| `POST` | `/api/billing/topup` | Create payment checkout (Stripe or Razorpay) |
 | `GET` | `/api/billing/invoices` | List invoices |
+| `GET` | `/api/billing/providers` | Available payment providers |
+| `GET` | `/api/billing/provider` | User's current payment provider |
+| `PUT` | `/api/billing/provider` | Set preferred payment provider |
 
 ### WebSocket
 
@@ -369,7 +380,7 @@ Full OpenAPI docs available at `/api/docs` when the server is running.
 |-----|----------|-------------|
 | Session Reaper | Every 5 min | Ends expired sessions, destroys grace-period sessions |
 | Usage Sync | Hourly | Flushes Redis balance cache to PostgreSQL |
-| Invoice Generator | 1st of month | Creates Stripe invoices for postpaid users |
+| Invoice Generator | 1st of month | Creates invoices for postpaid users (via Stripe or Razorpay) |
 
 ## Container Templates
 

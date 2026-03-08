@@ -31,6 +31,12 @@ export interface Config {
     stripe_secret_key: string;
     stripe_publishable_key: string;
     stripe_webhook_secret: string;
+    razorpay_key_id: string;
+    razorpay_key_secret: string;
+    razorpay_webhook_secret: string;
+    default_currency: string;
+    supported_currencies: string[];
+    exchange_rates: Record<string, number>;
     markup_multiplier: number;
     trial_credits: number;
     model_rates: Record<string, { input: number; output: number }>;
@@ -94,6 +100,12 @@ const DEFAULTS: Config = {
     stripe_secret_key: '',
     stripe_publishable_key: '',
     stripe_webhook_secret: '',
+    razorpay_key_id: '',
+    razorpay_key_secret: '',
+    razorpay_webhook_secret: '',
+    default_currency: 'USD',
+    supported_currencies: ['USD', 'INR'],
+    exchange_rates: { INR: 83 },
     markup_multiplier: 2.0,
     trial_credits: 2.0,
     model_rates: {
@@ -203,6 +215,9 @@ export function loadConfig(configPath?: string): Config {
   merged.database.password = process.env.MEGH_DB_PASSWORD || process.env.CAN_DB_PASSWORD || merged.database.password;
   merged.billing.stripe_secret_key = process.env.MEGH_STRIPE_SECRET_KEY || process.env.CAN_STRIPE_SECRET_KEY || merged.billing.stripe_secret_key;
   merged.billing.stripe_webhook_secret = process.env.MEGH_STRIPE_WEBHOOK_SECRET || process.env.CAN_STRIPE_WEBHOOK_SECRET || merged.billing.stripe_webhook_secret;
+  merged.billing.razorpay_key_id = process.env.MEGH_RAZORPAY_KEY_ID || merged.billing.razorpay_key_id;
+  merged.billing.razorpay_key_secret = process.env.MEGH_RAZORPAY_KEY_SECRET || merged.billing.razorpay_key_secret;
+  merged.billing.razorpay_webhook_secret = process.env.MEGH_RAZORPAY_WEBHOOK_SECRET || merged.billing.razorpay_webhook_secret;
   merged.llm.api_key = process.env.MEGH_LLM_API_KEY || process.env.CAN_LLM_API_KEY || merged.llm.api_key;
   merged.redis.password = process.env.MEGH_REDIS_PASSWORD || process.env.CAN_REDIS_PASSWORD || merged.redis.password;
   merged.llm.oauth_token = process.env.MEGH_OAUTH_TOKEN || process.env.CAN_OAUTH_TOKEN || merged.llm.oauth_token;

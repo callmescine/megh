@@ -9,9 +9,6 @@ import Terminal from '@/components/Terminal';
 import type { TerminalHandle } from '@/components/Terminal';
 import TTLBanner from '@/components/TTLBanner';
 import PreviewLinks from '@/components/PreviewLinks';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import { MeghLogo } from '@/components/MeghLogo';
 
 interface PreviewLink {
@@ -45,8 +42,9 @@ export default function TerminalPage() {
       try {
         const data = await api.sessions.get(sessionId);
         setSession(data);
-      } catch (err: any) {
-        setError(err.message || 'Session not found');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Session not found';
+        setError(message);
         setTimeout(() => router.push('/dashboard'), 2000);
       } finally {
         setLoading(false);
@@ -69,6 +67,10 @@ export default function TerminalPage() {
       if (prev.some((l) => l.port === port)) return prev;
       return [...prev, { port, url }];
     });
+  }, []);
+
+  const handlePreviewClose = useCallback((port: number) => {
+    setPreviewLinks((prev) => prev.filter((l) => l.port !== port));
   }, []);
 
   const handleDownload = async () => {
@@ -117,14 +119,14 @@ export default function TerminalPage() {
 
   if (loading || authLoading) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-surface-0 gap-6">
+      <div className="h-screen flex flex-col items-center justify-center bg-[#1c1c1e] gap-6">
         <div className="relative">
           <div className="absolute inset-0 bg-megh-500/20 rounded-full blur-[40px] animate-pulse-glow" />
           <MeghLogo size="xl" showText={false} className="relative z-10" />
         </div>
         <div className="flex flex-col items-center gap-2">
           <p className="text-sm text-gray-400 animate-fade-up">Connecting to terminal...</p>
-          <div className="w-32 h-1 bg-surface-200 rounded-full overflow-hidden">
+          <div className="w-32 h-1 bg-neutral-700 rounded-full overflow-hidden">
             <div className="h-full bg-gradient-to-r from-megh-500 to-megh-300 rounded-full animate-shimmer bg-[length:200%_100%]" />
           </div>
         </div>
@@ -134,7 +136,7 @@ export default function TerminalPage() {
 
   if (error) {
     return (
-      <div className="h-screen flex items-center justify-center bg-surface-0">
+      <div className="h-screen flex items-center justify-center bg-[#1c1c1e]">
         <p className="text-red-400">{error}</p>
       </div>
     );
@@ -145,24 +147,72 @@ export default function TerminalPage() {
   const truncatedId = sessionId.length > 12 ? sessionId.slice(0, 12) + '...' : sessionId;
 
   return (
-    <div className="h-screen flex flex-col bg-surface-0">
-      {/* Header Bar */}
-      <div className="flex-shrink-0 h-10 bg-surface-50 border-b border-surface-300 flex items-center justify-between px-4">
-        <div className="flex items-center gap-3">
-          <MeghLogo size="sm" showText={false} />
+    <div className="h-screen flex flex-col bg-[#1c1c1e]">
+      {/* macOS-style title bar */}
+      <div className="flex-shrink-0 h-11 bg-[#2d2d2f] border-b border-[#3a3a3c] flex items-center px-4 select-none">
+        {/* Left: traffic lights + nav */}
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {/* Traffic lights */}
+          <div className="flex items-center gap-[7px]">
+            {showEndConfirm ? (
+              <>
+                <button
+                  onClick={handleEndSession}
+                  title="End session"
+                  className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 transition-colors flex items-center justify-center group"
+                >
+                  <svg width="6" height="6" viewBox="0 0 6 6" className="opacity-0 group-hover:opacity-100 transition-opacity" stroke="#4a0000" strokeWidth="1.2">
+                    <line x1="1" y1="1" x2="5" y2="5" /><line x1="5" y1="1" x2="1" y2="5" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setShowEndConfirm(false)}
+                  className="w-3 h-3 rounded-full bg-yellow-500 hover:bg-yellow-400 transition-colors flex items-center justify-center group"
+                  title="Cancel"
+                >
+                  <svg width="6" height="6" viewBox="0 0 6 6" className="opacity-0 group-hover:opacity-100 transition-opacity" stroke="#5a4500" strokeWidth="1.2">
+                    <line x1="1" y1="3" x2="5" y2="3" />
+                  </svg>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setShowEndConfirm(true)}
+                  title="End session"
+                  className="w-3 h-3 rounded-full bg-[#ff5f57] hover:brightness-110 transition-all"
+                />
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  title="Back to dashboard"
+                  className="w-3 h-3 rounded-full bg-[#febc2e] hover:brightness-110 transition-all"
+                />
+                <div className="w-3 h-3 rounded-full bg-[#28c840] hover:brightness-110 transition-all" />
+              </>
+            )}
+          </div>
+
+          <div className="h-4 w-px bg-[#3a3a3c]" />
+
           <button
             onClick={() => router.push('/dashboard')}
-            className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            className="text-[11px] text-[#98989d] hover:text-white transition-colors"
           >
-            &larr; Dashboard
+            Dashboard
           </button>
-          <code className="text-xs text-gray-600 font-mono">{truncatedId}</code>
-          <Badge variant="info">2 vCPU</Badge>
-          <Badge variant="info">2 GB</Badge>
         </div>
 
+        {/* Center: session info */}
         <div className="flex items-center gap-2">
-          {previewLinks.length > 0 && <PreviewLinks links={previewLinks} />}
+          <MeghLogo size="sm" showText={false} />
+          <span className="text-[11px] text-[#98989d] font-mono">{truncatedId}</span>
+          <span className="text-[10px] text-[#636366] px-1.5 py-0.5 rounded bg-[#3a3a3c]">2 vCPU</span>
+          <span className="text-[10px] text-[#636366] px-1.5 py-0.5 rounded bg-[#3a3a3c]">2 GB</span>
+        </div>
+
+        {/* Right: actions */}
+        <div className="flex items-center gap-1.5 flex-1 justify-end">
+          <PreviewLinks links={previewLinks} />
 
           <input
             ref={uploadInputRef}
@@ -176,33 +226,41 @@ export default function TerminalPage() {
               e.target.value = '';
             }}
           />
-          <Button
-            variant="outline"
-            size="sm"
+          <button
             onClick={() => uploadInputRef.current?.click()}
             disabled={uploading}
+            title={uploading ? 'Uploading...' : 'Upload files'}
+            className="p-1.5 rounded-md text-[#98989d] hover:text-white hover:bg-[#3a3a3c] transition-colors disabled:opacity-40"
           >
-            {uploading ? 'Uploading...' : 'Upload'}
-          </Button>
+            {uploading ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+                <path d="M12 2v4m0 12v4m-7.07-14.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            )}
+          </button>
 
-          <Button variant="outline" size="sm" onClick={handleDownload}>
-            Download
-          </Button>
+          <button
+            onClick={handleDownload}
+            title="Download workspace"
+            className="p-1.5 rounded-md text-[#98989d] hover:text-white hover:bg-[#3a3a3c] transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </button>
 
-          {showEndConfirm ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400">Confirm?</span>
-              <Button variant="destructive" size="sm" onClick={handleEndSession}>
-                Yes, End
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setShowEndConfirm(false)}>
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <Button variant="destructive" size="sm" onClick={() => setShowEndConfirm(true)}>
-              End Session
-            </Button>
+          {showEndConfirm && (
+            <span className="text-[10px] text-[#ff453a] ml-1 animate-pulse">
+              Click red to confirm
+            </span>
           )}
         </div>
       </div>
@@ -220,6 +278,7 @@ export default function TerminalPage() {
           ref={terminalRef}
           sessionId={sessionId}
           onPreviewUrl={handlePreviewUrl}
+          onPreviewClose={handlePreviewClose}
         />
       </div>
     </div>

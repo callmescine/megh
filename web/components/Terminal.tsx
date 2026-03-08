@@ -10,6 +10,7 @@ import '@xterm/xterm/css/xterm.css';
 interface TerminalProps {
   sessionId: string;
   onPreviewUrl?: (url: string, port: number) => void;
+  onPreviewClose?: (port: number) => void;
 }
 
 export interface TerminalHandle {
@@ -18,7 +19,7 @@ export interface TerminalHandle {
 }
 
 const Terminal = forwardRef<TerminalHandle, TerminalProps>(
-  ({ sessionId, onPreviewUrl }, ref) => {
+  ({ sessionId, onPreviewUrl, onPreviewClose }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const termRef = useRef<XTerminal | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
@@ -45,13 +46,32 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(
 
         term = new XTerm({
           cursorBlink: true,
-          fontSize: 14,
-          fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+          fontSize: 13,
+          fontFamily: '"SF Mono", Menlo, Monaco, "Courier New", monospace',
+          lineHeight: 1.2,
           theme: {
-            background: '#1a1b26',
-            foreground: '#a9b1d6',
-            cursor: '#c0caf5',
-            selectionBackground: '#33467c',
+            background: '#1c1c1e',
+            foreground: '#e5e5e7',
+            cursor: '#e5e5e7',
+            cursorAccent: '#1c1c1e',
+            selectionBackground: '#3a3a3c',
+            selectionForeground: '#ffffff',
+            black: '#1c1c1e',
+            red: '#ff453a',
+            green: '#30d158',
+            yellow: '#ffd60a',
+            blue: '#0a84ff',
+            magenta: '#bf5af2',
+            cyan: '#64d2ff',
+            white: '#e5e5e7',
+            brightBlack: '#636366',
+            brightRed: '#ff6961',
+            brightGreen: '#4cd964',
+            brightYellow: '#ffe620',
+            brightBlue: '#409cff',
+            brightMagenta: '#da8aff',
+            brightCyan: '#70d7ff',
+            brightWhite: '#ffffff',
           },
         });
         termRef.current = term;
@@ -94,6 +114,12 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(
           }
         });
 
+        ws.on('preview_close', (msg: any) => {
+          if (onPreviewClose && msg.port) {
+            onPreviewClose(msg.port);
+          }
+        });
+
         ws.on('open', () => {
           setConnectionLost(false);
           ws.sendResize(term.rows, term.cols);
@@ -131,7 +157,7 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(
         ws?.disconnect();
         term?.dispose();
       };
-    }, [sessionId, onPreviewUrl]);
+    }, [sessionId, onPreviewUrl, onPreviewClose]);
 
     return (
       <div className="w-full h-full relative">
@@ -152,7 +178,7 @@ const Terminal = forwardRef<TerminalHandle, TerminalProps>(
         )}
         <div
           ref={containerRef}
-          className="w-full h-full min-h-[400px] bg-[#1a1b26]"
+          className="w-full h-full min-h-[400px] bg-[#1c1c1e]"
         />
       </div>
     );

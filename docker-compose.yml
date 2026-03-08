@@ -66,6 +66,9 @@ services:
       MEGH_DB_PASSWORD: ${DB_PASSWORD:-changeme}
       MEGH_STRIPE_SECRET_KEY: ${MEGH_STRIPE_SECRET_KEY:-}
       MEGH_STRIPE_WEBHOOK_SECRET: ${MEGH_STRIPE_WEBHOOK_SECRET:-}
+      MEGH_RAZORPAY_KEY_ID: ${MEGH_RAZORPAY_KEY_ID:-}
+      MEGH_RAZORPAY_KEY_SECRET: ${MEGH_RAZORPAY_KEY_SECRET:-}
+      MEGH_RAZORPAY_WEBHOOK_SECRET: ${MEGH_RAZORPAY_WEBHOOK_SECRET:-}
       MEGH_LLM_API_KEY: ${MEGH_LLM_API_KEY}
       MEGH_REDIS_PASSWORD: ${MEGH_REDIS_PASSWORD:-}
       MEGH_OAUTH_TOKEN: ${MEGH_OAUTH_TOKEN:-}
@@ -73,6 +76,9 @@ services:
       - ./config.docker.yaml:/app/config.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - ./secrets/oauth-token:/app/secrets/oauth-token:ro
+    networks:
+      - default
+      - containers
     ports:
       - "3000:3000"
     healthcheck:
@@ -175,7 +181,7 @@ networks:
     name: megh_internal
   containers:
     name: megh_containers
-    driver: bridge
+    external: true
 
 volumes:
   pgdata:

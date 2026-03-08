@@ -1,14 +1,35 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { MeghLogo } from '@/components/MeghLogo';
 
+function useDetectedCurrency(): { sym: string; price: string } {
+  const [currency, setCurrency] = useState<'INR' | 'USD'>('INR');
+
+  useEffect(() => {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      // If timezone is clearly not Asia/Kolkata (Indian), use USD
+      if (tz && !tz.startsWith('Asia/Kolkata') && !tz.startsWith('Asia/Calcutta')) {
+        setCurrency('USD');
+      }
+    } catch {
+      // default INR
+    }
+  }, []);
+
+  return currency === 'INR'
+    ? { sym: '\u20B9', price: '49' }
+    : { sym: '$', price: '0.49' };
+}
+
 export default function HomePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const { sym, price } = useDetectedCurrency();
 
   useEffect(() => {
     if (!loading && user) {
@@ -85,7 +106,7 @@ export default function HomePage() {
               },
               {
                 title: 'Pay Per Use',
-                desc: 'Transparent per-hour or per-session pricing. Monitor usage in real time and top up via Stripe when needed.',
+                desc: 'Transparent per-hour or per-session pricing. Monitor usage in real time and top up instantly.',
               },
             ].map((f) => (
               <div key={f.title} className="bg-surface-100 border border-surface-300 rounded-xl p-6 space-y-3 hover:border-megh-500/30 hover:-translate-y-1 hover:shadow-glow-sm transition-all duration-300">
@@ -106,7 +127,7 @@ export default function HomePage() {
           </p>
           <div className="inline-block rounded-2xl p-8 shadow-glow-md animate-pulse-glow">
             <div className="inline-flex items-baseline gap-2 text-5xl font-bold bg-gradient-to-r from-megh-300 to-megh-500 bg-clip-text text-transparent">
-              $0.50
+              {sym}{price}
               <span className="text-lg text-gray-500 font-normal bg-none text-transparent bg-clip-text" style={{ backgroundImage: 'none', color: 'rgb(107 114 128)' }}>/hour</span>
             </div>
           </div>

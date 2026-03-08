@@ -2,6 +2,7 @@ import Stripe from 'stripe';
 import { getConfig } from '../config.js';
 import { query } from '../db/connection.js';
 import { getRedis } from '../db/redis.js';
+import type { PaymentProvider, CheckoutResult } from './payment-provider.js';
 
 let stripeInstance: Stripe | null = null;
 
@@ -35,6 +36,15 @@ export async function createCustomer(userId: string, email: string): Promise<str
   );
 
   return customer.id;
+}
+
+export async function createCheckoutSessionWithUrl(
+  userId: string,
+  amount: number,
+  currency: string
+): Promise<CheckoutResult> {
+  const url = await createCheckoutSession(userId, amount);
+  return { url };
 }
 
 export async function createCheckoutSession(userId: string, amountUsd: number): Promise<string> {
@@ -158,6 +168,15 @@ export async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promi
   }
 }
 
+export async function createInvoiceWithCurrency(
+  userId: string,
+  amount: number,
+  currency: string,
+  description: string
+): Promise<string> {
+  return createInvoice(userId, amount, description);
+}
+
 export async function createInvoice(
   userId: string,
   amountUsd: number,
@@ -192,3 +211,23 @@ export async function createInvoice(
 
   return finalizedInvoice.id;
 }
+
+export function verifyWebhook(body: Buffer, signature: string): any {
+  const config = getConfig();
+  const stripe = getStripe();
+  return stripe.webhooks.constructEvent(
+    body,
+    signature,
+    config.billing.stripe_webhook_secret!
+  );
+}
+
+// PaymentProvider implementation
+export const stripeProvider: PaymentProvider = {
+  name: 'stripe',
+  isConfigured,
+  createCustomer,
+  createCheckoutSession: createCheckoutSessionWithUrl,
+  createInvoice: createInvoiceWithCurrency,
+  verifyWebhook,
+};

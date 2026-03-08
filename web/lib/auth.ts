@@ -11,6 +11,9 @@ interface User {
   status: string;
   role: string;
   balance: number;
+  balance_display: number;
+  currency: string;
+  payment_provider: string;
 }
 
 interface AuthContextType {
@@ -39,6 +42,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status: data.user.status,
         role: data.user.role || 'user',
         balance: parseFloat(data.billing?.balance_usd ?? '0') || 0,
+        balance_display: parseFloat(data.billing?.balance_display ?? data.billing?.balance_usd ?? '0') || 0,
+        currency: data.user.currency || data.billing?.currency || 'USD',
+        payment_provider: data.user.payment_provider || 'stripe',
       });
     } catch {
       setUser(null);
@@ -90,6 +96,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status: res.user.status,
       role: res.user.role || 'user',
       balance: Number(res.user.balance) || 0,
+      balance_display: Number(res.user.balance) || 0,
+      currency: res.user.currency || 'USD',
+      payment_provider: res.user.payment_provider || 'stripe',
     };
     setUser(u);
     refreshUser();
@@ -100,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(async (email: string, password: string) => {
     const res = await api.auth.register(email, password);
     if (res.token) localStorage.setItem('megh_token', res.token);
-    setUser({ ...res.user, balance: res.user.balance ?? 0 });
+    setUser({ ...res.user, balance: res.user.balance ?? 0, balance_display: res.user.balance ?? 0, currency: res.user.currency || 'USD', payment_provider: res.user.payment_provider || 'stripe' });
     refreshUser();
     startRefreshTimer();
   }, [refreshUser, startRefreshTimer]);
