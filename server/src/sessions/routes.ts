@@ -23,7 +23,15 @@ sessionRouter.get('/pricing', async (req: Request, res: Response): Promise<void>
   try {
     const ttlMinutes = parseInt(req.query.ttl_minutes as string) || 60;
     const tier = req.user?.tier || 'default';
-    const estimate = await getEstimatedCost(ttlMinutes, tier);
+    // Get user's currency from payment provider preference
+    const { query: dbQuery } = await import('../db/connection.js');
+    const userResult = await dbQuery(
+      'SELECT payment_provider FROM users WHERE id = $1',
+      [req.user!.id]
+    );
+    const provider = userResult.rows[0]?.payment_provider || 'stripe';
+    const currency = (req.query.currency as string) || (provider === 'razorpay' ? 'INR' : 'USD');
+    const estimate = await getEstimatedCost(ttlMinutes, tier, currency);
     res.json(estimate);
   } catch (err) {
     console.error('[Sessions] Pricing error:', err);

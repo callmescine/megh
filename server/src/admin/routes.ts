@@ -230,12 +230,12 @@ adminRouter.get('/pricing', async (_req: Request, res: Response) => {
 
 adminRouter.post('/pricing', async (req: Request, res: Response) => {
   try {
-    const { tier, pricing_model, price_per_hour, price_per_session, token_markup_multiplier } = req.body;
+    const { tier, pricing_model, price_per_hour, price_per_session, token_markup_multiplier, currency } = req.body;
     const result = await query(
-      `INSERT INTO pricing_config (tier, pricing_model, price_per_hour, price_per_session, token_markup_multiplier)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO pricing_config (tier, pricing_model, price_per_hour, price_per_session, token_markup_multiplier, currency)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [tier || 'default', pricing_model || 'per_hour', price_per_hour || 0, price_per_session || 0, token_markup_multiplier || 1.0],
+      [tier || 'default', pricing_model || 'per_hour', price_per_hour || 0, price_per_session || 0, token_markup_multiplier || 1.0, currency || 'USD'],
     );
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
@@ -245,7 +245,7 @@ adminRouter.post('/pricing', async (req: Request, res: Response) => {
 
 adminRouter.put('/pricing/:id', async (req: Request, res: Response) => {
   try {
-    const { tier, pricing_model, price_per_hour, price_per_session, token_markup_multiplier, active } = req.body;
+    const { tier, pricing_model, price_per_hour, price_per_session, token_markup_multiplier, active, currency } = req.body;
     const result = await query(
       `UPDATE pricing_config SET
          tier = COALESCE($1, tier),
@@ -254,10 +254,11 @@ adminRouter.put('/pricing/:id', async (req: Request, res: Response) => {
          price_per_session = COALESCE($4, price_per_session),
          token_markup_multiplier = COALESCE($5, token_markup_multiplier),
          active = COALESCE($6, active),
+         currency = COALESCE($7, currency),
          updated_at = NOW()
-       WHERE id = $7
+       WHERE id = $8
        RETURNING *`,
-      [tier, pricing_model, price_per_hour, price_per_session, token_markup_multiplier, active, req.params.id],
+      [tier, pricing_model, price_per_hour, price_per_session, token_markup_multiplier, active, currency, req.params.id],
     );
 
     if (result.rows.length === 0) {

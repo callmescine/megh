@@ -197,7 +197,7 @@ export default function SessionDetailPage() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 uppercase tracking-wide">Total Cost</p>
-                    <p className="text-gray-200 mt-1">${((usage.total_cost || 0) / 100).toFixed(4)}</p>
+                    <p className="text-gray-200 mt-1">{user?.currency === 'INR' ? '\u20B9' : '$'}{((usage.total_cost || 0) / 100).toFixed(4)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 uppercase tracking-wide">Requests</p>

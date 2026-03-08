@@ -11,14 +11,16 @@ import { authRouter } from './auth/routes.js';
 import { csrfProtection } from './auth/middleware.js';
 import { sessionRouter } from './sessions/routes.js';
 import { uploadRouter } from './uploads/routes.js';
-import { billingRouter } from './billing/routes.js';
-import { stripeWebhookRouter } from './billing/routes.js';
+import { billingRouter, stripeWebhookRouter, razorpayWebhookRouter } from './billing/routes.js';
+import { registerProvider } from './billing/provider-registry.js';
+import { stripeProvider } from './billing/stripe-service.js';
+import { razorpayProvider } from './billing/razorpay-service.js';
 import { initWebSocket } from './terminal/ws-handler.js';
 import { initScheduler } from './jobs/scheduler.js';
 import { initRedis, closeRedis } from './db/redis.js';
 import { initTTLSubscriber } from './sessions/session-service.js';
 import { startPortDetection, stopPortDetection } from './preview/port-detector.js';
-import { previewRouter } from './preview/routes.js';
+import { previewRouter, subdomainPreviewRouter } from './preview/routes.js';
 import { pingDocker } from './sessions/container-manager.js';
 import { adminRouter } from './admin/routes.js';
 import { metricsMiddleware, metricsRouter } from './metrics.js';
@@ -43,11 +45,19 @@ async function main() {
   const app = express();
   app.set('trust proxy', 1);
 
-  // Stripe webhook needs raw body — mount before json parser
-  app.use('/webhooks/stripe', stripeWebhookRouter);
+  // Register payment providers
+  registerProvider(stripeProvider);
+  registerProvider(razorpayProvider);
 
-  // Preview proxy — mount before json/helmet/csrf to avoid consuming
-  // request body and adding headers that break proxied content
+  // Webhooks need raw body — mount before json parser
+  app.use('/webhooks/stripe', stripeWebhookRouter);
+  app.use('/webhooks/razorpay', razorpayWebhookRouter);
+
+  // Preview proxies — mount before json/helmet/csrf to avoid consuming
+  // request body and adding headers that break proxied content.
+  // Subdomain preview needs cookie-parser for auth but is mounted before
+  // the global cookieParser(), so we add it inline.
+  app.use('/preview-sub', cookieParser(), subdomainPreviewRouter);
   app.use('/preview', previewRouter);
 
   app.use(helmet());

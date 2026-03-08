@@ -21,7 +21,9 @@ export const CreateSessionSchema = z.object({
 });
 
 export const TopupSchema = z.object({
-  amount: z.number().min(5, 'Minimum top-up is $5').max(500, 'Maximum top-up is $500'),
+  amount: z.number().min(5, 'Minimum top-up is $5 / \u20B9100').max(50000, 'Maximum top-up is $500 / \u20B950,000'),
+  currency: z.enum(['USD', 'INR']).optional(),
+  provider: z.enum(['stripe', 'razorpay']).optional(),
 });
 
 export const WsTicketSchema = z.object({

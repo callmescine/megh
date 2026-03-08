@@ -21,14 +21,20 @@ interface UsageRecord {
   cost_usd: number;
 }
 
-const AMOUNT_PRESETS = [5, 10, 25, 50];
+const AMOUNT_PRESETS_USD = [5, 10, 25, 50];
+const AMOUNT_PRESETS_INR = [500, 1000, 2000, 5000];
+
+function currencySymbol(c: string) {
+  return c === 'INR' ? '\u20B9' : '$';
+}
 
 export default function BillingPage() {
   const { user, refreshUser } = useAuth();
 
-  const [balance, setBalance] = useState<number | null>(null);
+  const [balanceDisplay, setBalanceDisplay] = useState<number>(0);
+  const [monthlyTotalDisplay, setMonthlyTotalDisplay] = useState<number>(0);
+  const [exchangeRate, setExchangeRate] = useState<number>(1);
   const [usageRecords, setUsageRecords] = useState<UsageRecord[]>([]);
-  const [totalUsage, setTotalUsage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [topupAmount, setTopupAmount] = useState(10);
   const [topping, setTopping] = useState(false);
@@ -36,6 +42,14 @@ export default function BillingPage() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const pageSize = 20;
+
+  // Provider state
+  const [availableProviders, setAvailableProviders] = useState<string[]>([]);
+  const [currentProvider, setCurrentProvider] = useState<string>(user?.payment_provider || 'stripe');
+  const [currency, setCurrency] = useState<string>(user?.currency || 'USD');
+
+  const sym = currencySymbol(currency);
+  const amountPresets = currency === 'INR' ? AMOUNT_PRESETS_INR : AMOUNT_PRESETS_USD;
 
   const fetchData = useCallback(async (pageNum: number) => {
     try {
@@ -46,11 +60,16 @@ export default function BillingPage() {
           limit: String(pageSize),
         }),
       ]);
-      setBalance(parseFloat(balanceRes.balance_usd ?? '0'));
+
+      const cur = balanceRes.currency || 'USD';
+      setCurrency(cur);
+      setBalanceDisplay(balanceRes.balance_display ?? parseFloat(balanceRes.balance_usd ?? '0'));
+      setMonthlyTotalDisplay(balanceRes.monthly_total_display ?? balanceRes.monthly_total ?? 0);
+      setExchangeRate(balanceRes.exchange_rate ?? 1);
+
       const records = Array.isArray(usageRes) ? usageRes : (usageRes.events || usageRes.records || []);
       setUsageRecords(records);
       setHasMore(records.length === pageSize);
-      setTotalUsage(balanceRes.monthly_total ?? 0);
     } catch (err) {
       console.error('Failed to fetch billing data:', err);
     } finally {
@@ -58,19 +77,58 @@ export default function BillingPage() {
     }
   }, []);
 
+  // Fetch providers on mount
+  useEffect(() => {
+    async function loadProviders() {
+      try {
+        const [providersRes, providerRes] = await Promise.all([
+          api.billing.providers(),
+          api.billing.getProvider(),
+        ]);
+        setAvailableProviders(providersRes.providers);
+        setCurrentProvider(providerRes.provider);
+        setCurrency(providerRes.provider === 'razorpay' ? 'INR' : 'USD');
+      } catch {
+        // Providers endpoint may not be available
+      }
+    }
+    if (user) loadProviders();
+  }, [user]);
+
   useEffect(() => {
     if (user) fetchData(page);
   }, [user, fetchData, page]);
 
+  // Update default topup amount when currency changes
+  useEffect(() => {
+    setTopupAmount(currency === 'INR' ? 500 : 10);
+  }, [currency]);
+
+  const handleProviderChange = async (provider: string) => {
+    try {
+      await api.billing.setProvider(provider);
+      setCurrentProvider(provider);
+      const newCurrency = provider === 'razorpay' ? 'INR' : 'USD';
+      setCurrency(newCurrency);
+      await refreshUser();
+      await fetchData(page);
+      addToast(`Payment provider set to ${provider === 'razorpay' ? 'Razorpay' : 'Stripe'}`, 'success');
+    } catch (err: any) {
+      addToast(err.message || 'Failed to change provider', 'error');
+    }
+  };
+
   const handleTopup = async () => {
-    if (topupAmount < 5 || topupAmount > 500) {
-      setTopupError('Amount must be between $5 and $500');
+    const min = currency === 'INR' ? 100 : 5;
+    const max = currency === 'INR' ? 50000 : 500;
+    if (topupAmount < min || topupAmount > max) {
+      setTopupError(`Amount must be between ${sym}${min} and ${sym}${max}`);
       return;
     }
     setTopping(true);
     setTopupError('');
     try {
-      const res = await api.billing.topup(topupAmount);
+      const res = await api.billing.topup(topupAmount, currency, currentProvider);
       if (res.checkout_url || res.url) {
         window.location.href = res.checkout_url || res.url;
       } else {
@@ -85,7 +143,13 @@ export default function BillingPage() {
     }
   };
 
-  const displayBalance = balance !== null ? balance : (user?.balance ?? 0);
+  const showProviderToggle = availableProviders.length > 1;
+
+  // Convert a USD cost to display currency
+  const displayCost = (costUsd: number) => {
+    if (currency === 'USD') return costUsd;
+    return costUsd * exchangeRate;
+  };
 
   return (
     <UserLayout>
@@ -102,10 +166,10 @@ export default function BillingPage() {
                 <CardContent className="py-6">
                   <p className="text-xs text-gray-500 uppercase tracking-wide">Current Balance</p>
                   <p className="text-4xl font-bold mt-2 bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-transparent">
-                    ${(displayBalance ?? 0).toFixed(2)}
+                    {sym}{(balanceDisplay ?? 0).toFixed(2)}
                   </p>
                   <p className="text-sm text-gray-500 mt-2">
-                    Monthly usage: <span className="text-gray-300">${(totalUsage ?? 0).toFixed(2)}</span>
+                    Monthly usage: <span className="text-gray-300">{sym}{(monthlyTotalDisplay ?? 0).toFixed(2)}</span>
                   </p>
                 </CardContent>
               </Card>
@@ -114,9 +178,28 @@ export default function BillingPage() {
                 <CardContent className="py-6 space-y-4">
                   <p className="text-xs text-gray-500 uppercase tracking-wide">Add Funds</p>
 
+                  {/* Provider toggle */}
+                  {showProviderToggle && (
+                    <div className="flex gap-2">
+                      {availableProviders.map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => handleProviderChange(p)}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                            currentProvider === p
+                              ? 'bg-megh-600 text-white border-megh-500'
+                              : 'bg-surface-200 text-gray-400 border-surface-300 hover:bg-surface-300'
+                          }`}
+                        >
+                          {p === 'stripe' ? 'Stripe (USD)' : 'Razorpay (INR)'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Amount presets */}
                   <div className="flex gap-2">
-                    {AMOUNT_PRESETS.map((amt) => (
+                    {amountPresets.map((amt) => (
                       <button
                         key={amt}
                         onClick={() => setTopupAmount(amt)}
@@ -126,18 +209,18 @@ export default function BillingPage() {
                             : 'bg-surface-200 text-gray-300 border-surface-300 hover:bg-surface-300'
                         }`}
                       >
-                        ${amt}
+                        {sym}{amt}
                       </button>
                     ))}
                   </div>
 
                   <div className="flex items-center gap-3">
                     <div className="relative flex-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">{sym}</span>
                       <input
                         type="number"
-                        min={5}
-                        max={500}
+                        min={currency === 'INR' ? 100 : 5}
+                        max={currency === 'INR' ? 50000 : 500}
                         value={topupAmount}
                         onChange={(e) => setTopupAmount(Number(e.target.value))}
                         className="w-full pl-7 pr-4 py-2.5 rounded-lg bg-surface-200 border border-surface-300 text-gray-100 focus:outline-none focus:ring-2 focus:ring-megh-500 focus:border-transparent transition-colors"
@@ -147,7 +230,11 @@ export default function BillingPage() {
                       {topping ? 'Processing...' : 'Top Up'}
                     </Button>
                   </div>
-                  <p className="text-xs text-gray-500">Min $5, Max $500. Payment via Stripe.</p>
+                  <p className="text-xs text-gray-500">
+                    {currency === 'INR'
+                      ? `Min ${sym}100, Max ${sym}50,000. Payment via Razorpay.`
+                      : `Min ${sym}5, Max ${sym}500. Payment via Stripe.`}
+                  </p>
                   {topupError && <p className="text-sm text-red-400">{topupError}</p>}
                 </CardContent>
               </Card>
@@ -198,7 +285,9 @@ export default function BillingPage() {
                           <TableCell className="text-gray-400">{record.model || '-'}</TableCell>
                           <TableCell className="text-right text-gray-300">{Number(record.input_tokens || 0).toLocaleString()}</TableCell>
                           <TableCell className="text-right text-gray-300">{Number(record.output_tokens || 0).toLocaleString()}</TableCell>
-                          <TableCell className="text-right text-gray-200 font-medium">${Number(record.cost_usd || 0).toFixed(4)}</TableCell>
+                          <TableCell className="text-right text-gray-200 font-medium">
+                            {sym}{displayCost(Number(record.cost_usd || 0)).toFixed(4)}
+                          </TableCell>
                         </TableRow>
                       ))
                     )}

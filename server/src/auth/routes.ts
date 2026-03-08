@@ -83,20 +83,33 @@ authRouter.post('/register', registerLimiter, validate(RegisterSchema), async (r
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
+    // Detect if user is from India via timezone or Accept-Language
+    const timezone = (req.headers['x-timezone'] as string) || '';
+    const acceptLang = (req.headers['accept-language'] as string) || '';
+    const isIndian = timezone.startsWith('Asia/Kolkata') ||
+      timezone.startsWith('Asia/Calcutta') ||
+      /\b(hi|hi-IN|en-IN)\b/i.test(acceptLang);
+
+    const paymentProvider = isIndian ? 'razorpay' : 'stripe';
+
     const userResult = await query(
-      `INSERT INTO users (email, password_hash)
-       VALUES ($1, $2)
+      `INSERT INTO users (email, password_hash, payment_provider)
+       VALUES ($1, $2, $3)
        RETURNING id, email, tier, status, created_at`,
-      [email, passwordHash],
+      [email, passwordHash, paymentProvider],
     );
 
     const user = userResult.rows[0];
 
+    // Indian users get ₹99 (converted to USD), international users get $0.99
     const config = getConfig();
+    const exchangeRate = config.billing.exchange_rates?.['INR'] || 83;
+    const trialCreditsUsd = isIndian ? 99 / exchangeRate : 0.99;
+
     await query(
       `INSERT INTO billing_accounts (user_id, balance_usd)
        VALUES ($1, $2)`,
-      [user.id, config.billing.trial_credits],
+      [user.id, trialCreditsUsd],
     );
 
     const token = signToken(user.id, user.role || 'user');
@@ -227,6 +240,20 @@ authRouter.get('/me', requireAuth, async (req: Request, res: Response): Promise<
 
     const billing = billingResult.rows[0] || null;
 
+    // Get user's payment provider preference for currency display
+    const userResult = await query(
+      'SELECT payment_provider FROM users WHERE id = $1',
+      [user.id],
+    );
+    const paymentProvider = userResult.rows[0]?.payment_provider || 'stripe';
+    const currency = paymentProvider === 'razorpay' ? 'INR' : 'USD';
+
+    // Convert balance for display in user's currency
+    const config = getConfig();
+    const exchangeRate = config.billing.exchange_rates?.[currency] || 1;
+    const balanceUsd = parseFloat(billing?.balance_usd ?? '0');
+    const balanceDisplay = currency === 'USD' ? balanceUsd : balanceUsd * exchangeRate;
+
     res.json({
       user: {
         id: user.id,
@@ -234,8 +261,14 @@ authRouter.get('/me', requireAuth, async (req: Request, res: Response): Promise<
         tier: user.tier,
         status: user.status,
         role: user.role,
+        payment_provider: paymentProvider,
+        currency,
       },
-      billing,
+      billing: billing ? {
+        ...billing,
+        balance_display: balanceDisplay,
+        currency,
+      } : null,
     });
   } catch (err) {
     console.error('[Auth] Me error:', err);

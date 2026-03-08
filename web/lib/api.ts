@@ -198,8 +198,12 @@ function apiUploadMultiple<T>(
 export const api = {
   auth: {
     register(email: string, password: string) {
+      const tz = typeof Intl !== 'undefined'
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone
+        : '';
       return apiFetch<{ token: string; user: any }>('/api/auth/register', {
         method: 'POST',
+        headers: { 'X-Timezone': tz },
         body: JSON.stringify({ email, password }),
       });
     },
@@ -268,7 +272,14 @@ export const api = {
 
   billing: {
     balance() {
-      return apiFetch<{ balance_usd: string; monthly_total: number }>('/api/billing/balance');
+      return apiFetch<{
+        balance_usd: string;
+        monthly_total: number;
+        currency: string;
+        balance_display: number;
+        monthly_total_display: number;
+        exchange_rate: number;
+      }>('/api/billing/balance');
     },
     usage(params?: Record<string, string>) {
       const query = params ? '?' + new URLSearchParams(params).toString() : '';
@@ -277,14 +288,26 @@ export const api = {
     sessionUsage(sessionId: string) {
       return apiFetch<any>(`/api/billing/usage/${sessionId}`);
     },
-    topup(amount: number) {
+    topup(amount: number, currency?: string, provider?: string) {
       return apiFetch<any>('/api/billing/topup', {
         method: 'POST',
-        body: JSON.stringify({ amount }),
+        body: JSON.stringify({ amount, currency, provider }),
       });
     },
     invoices() {
       return apiFetch<any>('/api/billing/invoices');
+    },
+    providers() {
+      return apiFetch<{ providers: string[]; default_currency: string; supported_currencies: string[] }>('/api/billing/providers');
+    },
+    getProvider() {
+      return apiFetch<{ provider: string }>('/api/billing/provider');
+    },
+    setProvider(provider: string) {
+      return apiFetch<{ provider: string }>('/api/billing/provider', {
+        method: 'PUT',
+        body: JSON.stringify({ provider }),
+      });
     },
   },
 };
